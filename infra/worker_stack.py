@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from aws_cdk import Duration, RemovalPolicy, Stack
 from aws_cdk import aws_ec2 as ec2
+from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_ecs as ecs
 from aws_cdk import aws_events as events
 from aws_cdk import aws_events_targets as targets
+from aws_cdk import aws_iam as iam
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_ssm as ssm
@@ -16,6 +18,9 @@ CLUSTER_NAME = "gridshift-workers"
 TASK_FAMILY = "gridshift-runner"
 NETWORK_PARAMETER = "/gridshift/worker/network"
 DEFAULT_IMAGE = "public.ecr.aws/docker/library/python:3.12-slim"
+ECR_PUBLIC = "public.ecr.aws/"
+CACHE_PREFIX = "ecr-public"
+NETWORK_MODES = ("public", "private")
 
 
 class WorkerRegionStack(Stack):
@@ -24,18 +29,34 @@ class WorkerRegionStack(Stack):
         # Pinned so synth needs no account lookups; "a" and "b" exist in every supported region.
         return [f"{self.region}a", f"{self.region}b"]
 
-    def __init__(self, scope: Construct, construct_id: str, *, home_region: str, **kwargs) -> None:
+    def __init__(
+        self, scope: Construct, construct_id: str, *, home_region: str, network_mode: str = "public", **kwargs
+    ) -> None:
         super().__init__(scope, construct_id, **kwargs)
+        if network_mode not in NETWORK_MODES:
+            raise ValueError(f"network_mode must be one of {NETWORK_MODES}")
+        private = network_mode == "private"
 
-        # Public subnets with no inbound rules and no NAT gateway: tasks can pull images and
-        # call AWS APIs, and nothing can reach them. Saves ~$32/month per region versus NAT.
+        # public: subnets with no inbound rules and no NAT gateway. Tasks can pull images and call
+        #   AWS APIs, and nothing can reach them. Saves ~$32/month per region versus NAT.
+        # private: isolated subnets with no internet path at all. AWS APIs go through VPC endpoints
+        #   and images through an ECR pull-through cache. Endpoints cost ~$0.01/hour each per AZ.
+        subnet_type = ec2.SubnetType.PRIVATE_ISOLATED if private else ec2.SubnetType.PUBLIC
         vpc = ec2.Vpc(
             self,
             "Vpc",
             max_azs=2,
             nat_gateways=0,
-            subnet_configuration=[ec2.SubnetConfiguration(name="public", subnet_type=ec2.SubnetType.PUBLIC)],
+            subnet_configuration=[ec2.SubnetConfiguration(name=network_mode, subnet_type=subnet_type)],
         )
+        if private:
+            vpc.add_gateway_endpoint("S3", service=ec2.GatewayVpcEndpointAwsService.S3)
+            for name, service in {
+                "EcrApi": ec2.InterfaceVpcEndpointAwsService.ECR,
+                "EcrDocker": ec2.InterfaceVpcEndpointAwsService.ECR_DOCKER,
+                "Logs": ec2.InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS,
+            }.items():
+                vpc.add_interface_endpoint(name, service=service, private_dns_enabled=True)
         security_group = ec2.SecurityGroup(
             self, "TaskSecurityGroup", vpc=vpc, description="GridShift job tasks: egress only", allow_all_outbound=True
         )
@@ -65,10 +86,13 @@ class WorkerRegionStack(Stack):
 
         # Size is a placeholder: every RunTask overrides cpu/memory with the job's size.
         task_definition = ecs.FargateTaskDefinition(self, "Runner", family=TASK_FAMILY, cpu=256, memory_limit_mib=512)
+        image = self.node.try_get_context("job_image") or DEFAULT_IMAGE
+        if private:
+            image = self._cache_through_ecr(image, task_definition)
         task_definition.add_container(
             "job",
             container_name="job",
-            image=ecs.ContainerImage.from_registry(self.node.try_get_context("job_image") or DEFAULT_IMAGE),
+            image=ecs.ContainerImage.from_registry(image),
             logging=ecs.LogDrivers.aws_logs(stream_prefix="job", log_group=log_group),
             environment={"GRIDSHIFT_REGION": self.region},
         )
@@ -83,7 +107,8 @@ class WorkerRegionStack(Stack):
                 {
                     "cluster": cluster.cluster_name,
                     "task_definition_family": TASK_FAMILY,
-                    "subnets": vpc.select_subnets(subnet_type=ec2.SubnetType.PUBLIC).subnet_ids,
+                    "subnets": vpc.select_subnets(subnet_type=subnet_type).subnet_ids,
+                    "assign_public_ip": "DISABLED" if private else "ENABLED",
                     "security_groups": [security_group.security_group_id],
                     "bucket": bucket.bucket_name,
                 }
@@ -116,3 +141,29 @@ class WorkerRegionStack(Stack):
                     )
                 ],
             )
+
+    def _cache_through_ecr(self, image: str, task_definition: ecs.FargateTaskDefinition) -> str:
+        """Serve an ECR Public image from this region's private ECR via a pull-through cache."""
+        if not image.startswith(ECR_PUBLIC):
+            raise ValueError(f"private network mode needs a public.ecr.aws image, got {image!r}")
+        ecr.CfnPullThroughCacheRule(
+            self, "EcrPublicCache", ecr_repository_prefix=CACHE_PREFIX, upstream_registry_url=ECR_PUBLIC.rstrip("/")
+        )
+        execution_role = task_definition.obtain_execution_role()
+        execution_role.add_to_principal_policy(
+            iam.PolicyStatement(actions=["ecr:GetAuthorizationToken"], resources=["*"])
+        )
+        execution_role.add_to_principal_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "ecr:BatchGetImage",
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:BatchCheckLayerAvailability",
+                    # The first pull creates the cache repository and imports the image.
+                    "ecr:CreateRepository",
+                    "ecr:BatchImportUpstreamImage",
+                ],
+                resources=[self.format_arn(service="ecr", resource="repository", resource_name=f"{CACHE_PREFIX}/*")],
+            )
+        )
+        return f"{self.account}.dkr.ecr.{self.region}.{self.url_suffix}/{CACHE_PREFIX}/{image.removeprefix(ECR_PUBLIC)}"

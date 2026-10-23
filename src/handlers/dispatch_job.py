@@ -50,7 +50,7 @@ def handler(event, _context):
             "awsvpcConfiguration": {
                 "subnets": worker["subnets"],
                 "securityGroups": worker["security_groups"],
-                "assignPublicIp": "ENABLED",
+                "assignPublicIp": worker.get("assign_public_ip", "ENABLED"),
             }
         },
         overrides={
