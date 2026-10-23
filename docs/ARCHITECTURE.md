@@ -17,6 +17,8 @@ region and time slot with the lowest expected emissions, while respecting:
 
 ## High-level design
 
+![GridShift architecture](architecture.svg)
+
 ```
                          ┌───────────────────────── Control plane (home region) ─────────────────────────┐
   client ──SigV4──► API Gateway (HTTP, IAM auth)                                                         │
@@ -83,7 +85,9 @@ static annual average, and the decision records how much forecast data it had.
 | Cross-region EventBridge for completion | Nothing polls. Worker regions stay decoupled from the control plane. | Events can arrive late or twice, so completion is idempotent |
 | SSM parameter for worker discovery | Workers can be added or removed without redeploying the control plane | Lookup at runtime (cached per Lambda container) |
 | Fargate Spot first, on-demand fallback | About 70% cheaper. Batch work tolerates interruption. | Needs a safety margin on the deadline (20%) |
-| Public subnets, no inbound rules, no NAT | NAT gateways cost about $32/month per region, which is a lot for a portfolio project | Private subnets + VPC endpoints is the production upgrade (see roadmap) |
+| Two network modes | `public` has no inbound rules and no NAT, so it costs nothing extra. `private` has no internet route at all: VPC endpoints plus an ECR pull-through cache. | `private` costs about $0.01/hour per endpoint per AZ, so it's opt-in |
+| Prices from the AWS Price List | Real per-region Fargate and per-route transfer prices, refreshed by a script | Spot isn't published, so it's modelled as a 70% discount |
+| OIDC deploy role | GitHub Actions gets 1-hour credentials, limited to the repo's `production` environment. No stored keys. | The role can assume the CDK bootstrap roles, which are powerful by design |
 | Pluggable carbon provider + static fallback | The system keeps working when the carbon API is down | The fallback is less precise |
 | Job spec stored as JSON | Avoids DynamoDB Decimal conversions and keeps one schema | Spec fields can't be queried individually (not needed) |
 
@@ -106,8 +110,7 @@ static annual average, and the decision records how much forecast data it had.
 
 ## Roadmap
 
-1. Private subnets + VPC endpoints (ECR, Logs, S3) as an option for production mode.
-2. Pricing API ingestion to replace the static price table.
-3. Cognito-authenticated web dashboard (carbon vs. cost vs. latency per job).
-4. Replicate container images to every worker region (ECR replication).
-5. Multi-account mode: workers in separate accounts behind AWS Organizations.
+1. Cognito-authenticated web dashboard (carbon vs. cost vs. latency per job).
+2. Custom job images built once and replicated to every worker region (ECR replication).
+3. Measured CPU utilisation (Container Insights) instead of a fixed 50% in the energy model.
+4. Multi-account mode: workers in separate accounts behind AWS Organizations.

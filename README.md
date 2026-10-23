@@ -13,7 +13,7 @@ us-east-1     US-MIDA-PJM      380
 ca-central-1  CA-QC             35
 eu-north-1    SE-SE3            25
 ...
-explanation: Run in eu-north-1 now at ~25 gCO2e/kWh: 93% less CO2e than running now in us-east-1, cost +5.2%.
+explanation: Run in eu-north-1 now at ~25 gCO2e/kWh: 93% less CO2e than running now in us-east-1, cost +10.0%.
 ```
 
 ## Why
@@ -37,6 +37,8 @@ explanation: Run in eu-north-1 now at ~25 gCO2e/kWh: 93% less CO2e than running 
 
 ## Architecture
 
+![GridShift architecture](docs/architecture.svg)
+
 The control plane runs in one home region: API Gateway (IAM auth), Lambda, Step Functions,
 DynamoDB, EventBridge, SNS and CloudWatch. Worker stacks run in each worker region: a VPC,
 an ECS Fargate cluster, an S3 output bucket and an SSM discovery parameter. Task completions
@@ -58,10 +60,13 @@ src/gridshift/             Decision engine (pure Python, no AWS dependencies)
   energy.py                Energy model (Cloud Carbon Footprint coefficients)
   carbon.py                Carbon-intensity providers (Electricity Maps, static)
   regions.py               Region profiles: grid zone, prices, fallback intensity
+  prices.json              Fargate + data-transfer prices from the AWS Price List
 src/handlers/              Lambda handlers (submit, plan, dispatch, complete, finalize, ingest, get)
 scripts/plan_locally.py    Run the planner locally, no AWS account needed
 scripts/gridshift_cli.py   SigV4-signed client for the deployed API
-tests/                     pytest suite (engine and handlers with moto)
+scripts/refresh_prices.py  Regenerate prices.json from the public AWS Price List
+.github/workflows/         CI (lint, tests, synth) and keyless OIDC deploy
+tests/                     pytest suite: engine, handlers (moto), CDK assertions
 ```
 
 ## Quick start
@@ -100,6 +105,27 @@ aws ssm put-parameter --region us-east-1 --type SecureString \
 # cdk.json → "carbon_provider": "electricitymaps", then: make deploy
 ```
 
+#### Network modes
+
+Set `network_mode` in `cdk.json`:
+
+| Mode | Network | Images | Extra cost |
+|---|---|---|---|
+| `public` (default) | Public subnets, no inbound rules, no NAT | Pulled from ECR Public | None |
+| `private` | Isolated subnets, no internet route at all | ECR pull-through cache in each region | VPC endpoints, about $0.01/hour each per AZ |
+
+#### Keyless deploys from GitHub Actions
+
+`make deploy` also creates `GridShift-GitHubDeploy`, an IAM role that GitHub Actions can assume
+through OIDC. It works only for jobs running in this repo's `production` environment, so no AWS
+keys are stored in GitHub. After the first deploy:
+
+1. In the GitHub repo settings, create an environment named `production`. Optionally add required reviewers.
+2. Add a repository variable `AWS_DEPLOY_ROLE_ARN` set to the stack's `DeployRoleArn` output.
+3. Run the **deploy** workflow from the Actions tab.
+
+If the account already has a GitHub OIDC provider, set `github_oidc_provider_arn` in `cdk.json` to reuse it.
+
 ### 3. Submit a job
 
 ```bash
@@ -135,6 +161,8 @@ to get an AWS Budget alarm at 80% of `monthly_budget_usd`.
 
 ## Limitations
 
-- Region prices and static intensities are approximations (see `src/gridshift/regions.py`).
+- Fargate Spot prices aren't published in the Price List because they change over time.
+  They are modelled as a 70% discount on real on-demand prices.
+- Static grid intensities are rough annual averages, used only when live forecasts are missing.
 - The energy model uses a fixed 50% CPU utilisation. Measuring real utilisation is a roadmap item.
 - Jobs use a public base image. Custom images need to exist in every worker region.
