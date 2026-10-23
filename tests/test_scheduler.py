@@ -72,6 +72,21 @@ def test_unsorted_forecasts_give_the_same_baseline():
     assert shuffled == ordered
 
 
+def test_never_waits_beyond_the_forecast_horizon():
+    # 6h of forecast at 400; the static average (380) is lower but nothing is known after 6h.
+    series = [ForecastPoint(NOW + timedelta(hours=h), 400.0) for h in range(6)]
+    job = make_job(allowed_regions=("us-east-1",), deadline=NOW + timedelta(days=3))
+    decision = plan(job, NOW, WORKERS, {"us-east-1": series})
+    assert datetime.fromisoformat(decision.start_at) <= NOW + timedelta(hours=5)
+
+
+def test_far_deadlines_are_capped_at_seven_days():
+    series = [ForecastPoint(NOW + timedelta(hours=h), 500.0 if h < 24 * 9 else 10.0) for h in range(24 * 10)]
+    job = make_job(allowed_regions=("us-east-1",), deadline=NOW + timedelta(days=30))
+    decision = plan(job, NOW, WORKERS, {"us-east-1": series})
+    assert datetime.fromisoformat(decision.start_at) <= NOW + timedelta(days=7)
+
+
 def test_respects_deadline_with_safety_margin():
     series = [ForecastPoint(NOW + timedelta(hours=h), 500.0 if h < 6 else 100.0) for h in range(24)]
     # 3h deadline, 1h job: latest start = 3h - 1.2h = 1h48m, so the 18:00 dip is unreachable.

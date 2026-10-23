@@ -211,6 +211,9 @@ class ControlPlaneStack(Stack):
         run_spot = dispatch("RunOnSpot", "$.plan.region", "FARGATE_SPOT")
         run_fallback = dispatch("RunFallbackOnDemand", "$.plan.fallback_region", "FARGATE")
         run_fallback.add_catch(finalize_failed, result_path="$.error")
+        # A job that fails on its own (non-zero exit) would fail again elsewhere, so only
+        # infrastructure failures (Spot interruption, start failure, timeout) get the fallback.
+        run_spot.add_catch(finalize_failed, errors=["EssentialContainerExited"], result_path="$.error")
         run_spot.add_catch(run_fallback, result_path="$.spot_error")
 
         finalize_ok = tasks.LambdaInvoke(

@@ -21,6 +21,8 @@ DEFAULT_STEP_MINUTES = 30
 # Extra time reserved before the deadline so a Spot interruption can still be retried.
 DEADLINE_SAFETY_FACTOR = 0.2
 FULL_COVERAGE = 0.999
+# Keeps every wait well inside the workflow's 8-day execution limit.
+MAX_DELAY = timedelta(days=7)
 
 
 class PlanningError(RuntimeError):
@@ -149,7 +151,7 @@ def plan(
     baseline = _score(job, data_profile, data_profile, now, series_by_region[job.data_region])
 
     runtime = timedelta(minutes=job.est_runtime_minutes)
-    latest_start = job.deadline - runtime * (1 + DEADLINE_SAFETY_FACTOR)
+    latest_start = min(job.deadline - runtime * (1 + DEADLINE_SAFETY_FACTOR), now + MAX_DELAY)
     starts = _candidate_starts(now, latest_start, step_minutes) if latest_start >= now else [now]
 
     evaluated = 0
@@ -159,6 +161,10 @@ def plan(
         series = series_by_region[region]
         for start in starts:
             candidate = _score(job, profiles[region], data_profile, start, series)
+            # Only wait for a slot the forecast actually covers; delaying into unknown time on the
+            # strength of a static average is a guess, not a saving.
+            if start != now and candidate.forecast_coverage < FULL_COVERAGE:
+                continue
             evaluated += 1
             if _overhead_pct(candidate.cost_usd, baseline.cost_usd) > job.max_cost_overhead_pct + 1e-9:
                 over_budget += 1
