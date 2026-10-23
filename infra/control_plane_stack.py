@@ -17,6 +17,7 @@ from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_sns as sns
 from aws_cdk import aws_sns_subscriptions as subscriptions
+from aws_cdk import aws_sqs as sqs
 from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as tasks
 from constructs import Construct
@@ -245,7 +246,24 @@ class ControlPlaneStack(Stack):
         state_machine.grant_task_response(complete_fn)
         submit_fn.add_environment("STATE_MACHINE_ARN", state_machine.state_machine_arn)
 
-        # Task completions from every worker region land on this region's default bus.
+        # Task completions from every worker region land on this region's default bus. Events that
+        # still fail after retries are kept in a DLQ and raise an alarm; the job itself recovers
+        # through its task timeout and the on-demand fallback.
+        completion_dlq = sqs.Queue(
+            self,
+            "CompletionDlq",
+            retention_period=Duration.days(14),
+            encryption=sqs.QueueEncryption.SQS_MANAGED,
+            enforce_ssl=True,
+        )
+        completion_dlq.metric_approximate_number_of_messages_visible(period=Duration.minutes(5)).create_alarm(
+            self,
+            "CompletionDlqAlarm",
+            threshold=1,
+            evaluation_periods=1,
+            treat_missing_data=cw.TreatMissingData.NOT_BREACHING,
+            alarm_description="A GridShift task completion event could not be processed",
+        ).add_alarm_action(cw_actions.SnsAction(topic))
         events.Rule(
             self,
             "TaskStopped",
@@ -254,7 +272,7 @@ class ControlPlaneStack(Stack):
                 detail_type=["ECS Task State Change"],
                 detail={"lastStatus": ["STOPPED"], "startedBy": events.Match.prefix("gridshift-")},
             ),
-            targets=[targets.LambdaFunction(complete_fn, retry_attempts=4)],
+            targets=[targets.LambdaFunction(complete_fn, retry_attempts=4, dead_letter_queue=completion_dlq)],
         )
         events.Rule(
             self,
@@ -265,6 +283,10 @@ class ControlPlaneStack(Stack):
 
         # API ------------------------------------------------------------------------------
         api = apigw.HttpApi(self, "Api", default_authorizer=authorizers.HttpIamAuthorizer())
+        # Caps request rate so a runaway client can't flood the account with jobs.
+        api.default_stage.node.default_child.add_property_override(
+            "DefaultRouteSettings", {"ThrottlingRateLimit": 10, "ThrottlingBurstLimit": 20}
+        )
         api.add_routes(
             path="/jobs",
             methods=[apigw.HttpMethod.POST],

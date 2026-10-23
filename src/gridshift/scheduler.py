@@ -143,8 +143,10 @@ def plan(
     if not allowed:
         raise PlanningError("none of the allowed_regions are configured worker regions")
 
+    # average_intensity needs each series in time order; callers may pass them in any order.
+    series_by_region = {region: sorted(forecasts.get(region, ())) for region in profiles}
     data_profile = profiles[job.data_region]
-    baseline = _score(job, data_profile, data_profile, now, forecasts.get(job.data_region, ()))
+    baseline = _score(job, data_profile, data_profile, now, series_by_region[job.data_region])
 
     runtime = timedelta(minutes=job.est_runtime_minutes)
     latest_start = job.deadline - runtime * (1 + DEADLINE_SAFETY_FACTOR)
@@ -154,7 +156,7 @@ def plan(
     over_budget = 0
     best: Candidate | None = None
     for region in allowed:
-        series = sorted(forecasts.get(region, ()))
+        series = series_by_region[region]
         for start in starts:
             candidate = _score(job, profiles[region], data_profile, start, series)
             evaluated += 1
@@ -171,7 +173,7 @@ def plan(
     if best is None:
         # Every slot broke the cost budget. Run in the cheapest allowed region now rather than fail.
         best = min(
-            (_score(job, profiles[r], data_profile, now, forecasts.get(r, ())) for r in allowed),
+            (_score(job, profiles[r], data_profile, now, series_by_region[r]) for r in allowed),
             key=lambda c: c.cost_usd,
         )
 

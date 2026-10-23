@@ -64,6 +64,14 @@ def test_shifts_in_time_within_a_region():
     assert decision.carbon_saved_pct == pytest.approx(80.0)
 
 
+def test_unsorted_forecasts_give_the_same_baseline():
+    series = [ForecastPoint(NOW + timedelta(hours=h), 500.0 if h == 0 else 100.0) for h in range(24)]
+    ordered = plan(make_job(), NOW, WORKERS, {"us-east-1": series})
+    shuffled = plan(make_job(), NOW, WORKERS, {"us-east-1": list(reversed(series))})
+    assert shuffled.baseline_intensity == ordered.baseline_intensity == 500.0
+    assert shuffled == ordered
+
+
 def test_respects_deadline_with_safety_margin():
     series = [ForecastPoint(NOW + timedelta(hours=h), 500.0 if h < 6 else 100.0) for h in range(24)]
     # 3h deadline, 1h job: latest start = 3h - 1.2h = 1h48m, so the 18:00 dip is unreachable.

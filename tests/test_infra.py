@@ -91,6 +91,14 @@ def test_control_plane_dispatcher_cannot_run_arbitrary_tasks():
     template = Template.from_stack(stack)
     template.resource_count_is("AWS::StepFunctions::StateMachine", 1)
     template.resource_count_is("AWS::Budgets::Budget", 0)
+    template.has_resource_properties(
+        "AWS::Events::Rule",
+        {"Targets": [Match.object_like({"DeadLetterConfig": Match.any_value(), "RetryPolicy": Match.any_value()})]},
+    )
+    template.has_resource_properties(
+        "AWS::ApiGatewayV2::Stage",
+        {"DefaultRouteSettings": {"ThrottlingRateLimit": 10, "ThrottlingBurstLimit": 20}},
+    )
     run_task = [st for st in policy_statements(template) if "ecs:RunTask" in json.dumps(st["Action"])]
     assert len(run_task) == 1
     resources = run_task[0]["Resource"]

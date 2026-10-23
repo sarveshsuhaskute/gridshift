@@ -1,5 +1,7 @@
 # GridShift
 
+[![ci](https://github.com/sarveshsuhaskute/gridshift/actions/workflows/ci.yml/badge.svg)](https://github.com/sarveshsuhaskute/gridshift/actions/workflows/ci.yml)
+
 **Carbon-aware, multi-region batch scheduling on AWS.**
 
 GridShift runs your batch jobs in the AWS region and time slot where electricity is cleanest.

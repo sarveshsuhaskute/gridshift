@@ -47,8 +47,9 @@ def handler(event, _context):
         logger.info("ignoring stale or duplicate event for job %s task %s", job_id, task_arn)
         return
 
-    containers = detail.get("containers") or [{}]
-    exit_code = containers[0].get("exitCode")
+    # The task definition has a single essential container named "job".
+    job_container = next((c for c in detail.get("containers", []) if c.get("name") == "job"), {})
+    exit_code = job_container.get("exitCode")
     stop_code = detail.get("stopCode", "")
     runtime = 0.0
     if detail.get("startedAt") and detail.get("stoppedAt"):

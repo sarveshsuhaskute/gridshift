@@ -100,7 +100,7 @@ def stopped_event(task_arn=TASK_ARN, exit_code=0, stop_code="EssentialContainerE
             "taskArn": task_arn,
             "startedBy": "gridshift-job-1",
             "stopCode": stop_code,
-            "containers": [{"exitCode": exit_code}],
+            "containers": [{"name": "job", "exitCode": exit_code}],
             "startedAt": "2026-10-24T12:00:00Z",
             "stoppedAt": "2026-10-24T12:30:00Z",
         },
