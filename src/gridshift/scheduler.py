@@ -124,7 +124,7 @@ def _score(
         # Network energy is split between both ends, so use the mean of their static averages.
         network_intensity = (region.static_intensity + data_region.static_intensity) / 2
         carbon += energy.grams_co2(energy.transfer_kwh(job.input_data_gb), network_intensity)
-        cost += job.input_data_gb * data_region.transfer_out_per_gb
+        cost += job.input_data_gb * data_region.transfer_cost_per_gb(region.region)
 
     return Candidate(region.region, start, intensity, carbon, cost, coverage)
 

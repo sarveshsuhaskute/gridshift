@@ -1,14 +1,22 @@
-"""Static per-region profile: grid zone, fallback carbon intensity and approximate prices.
+"""Per-region profile: grid zone, fallback carbon intensity (see grid_zones.py) and prices.
 
-Values are approximations (last reviewed 2026-10) used for planning only. Static
-intensities are rough annual averages and are used only when no live forecast is available.
-Prices are Fargate Spot (Linux/x86) per hour and inter-region data transfer out per GB.
-Check them against the AWS pricing pages before relying on them.
+Prices come from prices.json, which ``scripts/refresh_prices.py`` generates from the public AWS
+Price List. Fargate Spot prices are not published there because they change over time, so they
+are modelled as a discount on on-demand (AWS advertises up to 70%).
 """
 
 from __future__ import annotations
 
+import json
+from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
+
+from gridshift.grid_zones import STATIC
+
+SPOT_DISCOUNT = 0.70
+# Conservative rate used when the price file has no entry for a route.
+DEFAULT_TRANSFER_PER_GB = 0.147
 
 
 @dataclass(frozen=True)
@@ -16,23 +24,38 @@ class RegionProfile:
     region: str
     grid_zone: str
     static_intensity: float
-    spot_vcpu_hour: float
-    spot_gb_hour: float
-    transfer_out_per_gb: float
+    vcpu_hour: float
+    gb_hour: float
+    transfer_out_per_gb: Mapping[str, float]
+
+    @property
+    def spot_vcpu_hour(self) -> float:
+        return self.vcpu_hour * (1 - SPOT_DISCOUNT)
+
+    @property
+    def spot_gb_hour(self) -> float:
+        return self.gb_hour * (1 - SPOT_DISCOUNT)
+
+    def transfer_cost_per_gb(self, destination: str) -> float:
+        return self.transfer_out_per_gb.get(destination, DEFAULT_TRANSFER_PER_GB)
 
 
-_PROFILES = [
-    RegionProfile("us-east-1", "US-MIDA-PJM", 380.0, 0.01245, 0.00137, 0.02),
-    RegionProfile("us-west-2", "US-NW-BPAT", 110.0, 0.01245, 0.00137, 0.02),
-    RegionProfile("ca-central-1", "CA-QC", 35.0, 0.01370, 0.00150, 0.02),
-    RegionProfile("eu-north-1", "SE-SE3", 25.0, 0.01310, 0.00144, 0.02),
-    RegionProfile("eu-west-1", "IE", 330.0, 0.01390, 0.00152, 0.02),
-    RegionProfile("eu-west-3", "FR", 55.0, 0.01470, 0.00160, 0.02),
-    RegionProfile("eu-central-1", "DE", 380.0, 0.01520, 0.00167, 0.02),
-    RegionProfile("ap-south-1", "IN-WE", 680.0, 0.01220, 0.00134, 0.086),
-]
+def _load() -> dict[str, RegionProfile]:
+    prices = json.loads((Path(__file__).parent / "prices.json").read_text())["regions"]
+    return {
+        region: RegionProfile(
+            region=region,
+            grid_zone=zone,
+            static_intensity=intensity,
+            vcpu_hour=prices[region]["fargate_vcpu_hour"],
+            gb_hour=prices[region]["fargate_gb_hour"],
+            transfer_out_per_gb=prices[region]["transfer_out_per_gb"],
+        )
+        for region, (zone, intensity) in STATIC.items()
+    }
 
-PROFILES: dict[str, RegionProfile] = {p.region: p for p in _PROFILES}
+
+PROFILES: dict[str, RegionProfile] = _load()
 
 
 def get_profile(region: str) -> RegionProfile:

@@ -1,0 +1,110 @@
+{
+  "generated_at": "2026-10-23T17:41:53Z",
+  "source": "AWS Price List bulk API (on-demand, Linux/x86)",
+  "regions": {
+    "ap-south-1": {
+      "fargate_vcpu_hour": 0.04256,
+      "fargate_gb_hour": 0.004655,
+      "transfer_out_per_gb": {
+        "ca-central-1": 0.086,
+        "eu-central-1": 0.086,
+        "eu-north-1": 0.086,
+        "eu-west-1": 0.086,
+        "eu-west-3": 0.086,
+        "us-east-1": 0.086,
+        "us-west-2": 0.086
+      }
+    },
+    "ca-central-1": {
+      "fargate_vcpu_hour": 0.04456,
+      "fargate_gb_hour": 0.004865,
+      "transfer_out_per_gb": {
+        "ap-south-1": 0.02,
+        "eu-central-1": 0.02,
+        "eu-north-1": 0.02,
+        "eu-west-1": 0.02,
+        "eu-west-3": 0.02,
+        "us-east-1": 0.02,
+        "us-west-2": 0.02
+      }
+    },
+    "eu-central-1": {
+      "fargate_vcpu_hour": 0.04656,
+      "fargate_gb_hour": 0.00511,
+      "transfer_out_per_gb": {
+        "ap-south-1": 0.02,
+        "ca-central-1": 0.02,
+        "eu-north-1": 0.02,
+        "eu-west-1": 0.02,
+        "eu-west-3": 0.02,
+        "us-east-1": 0.02,
+        "us-west-2": 0.02
+      }
+    },
+    "eu-north-1": {
+      "fargate_vcpu_hour": 0.0445,
+      "fargate_gb_hour": 0.0049,
+      "transfer_out_per_gb": {
+        "ap-south-1": 0.02,
+        "ca-central-1": 0.02,
+        "eu-central-1": 0.02,
+        "eu-west-1": 0.02,
+        "eu-west-3": 0.02,
+        "us-east-1": 0.02,
+        "us-west-2": 0.02
+      }
+    },
+    "eu-west-1": {
+      "fargate_vcpu_hour": 0.04048,
+      "fargate_gb_hour": 0.004445,
+      "transfer_out_per_gb": {
+        "ap-south-1": 0.02,
+        "ca-central-1": 0.02,
+        "eu-central-1": 0.02,
+        "eu-north-1": 0.02,
+        "eu-west-3": 0.02,
+        "us-east-1": 0.02,
+        "us-west-2": 0.02
+      }
+    },
+    "eu-west-3": {
+      "fargate_vcpu_hour": 0.0486,
+      "fargate_gb_hour": 0.0053,
+      "transfer_out_per_gb": {
+        "ap-south-1": 0.02,
+        "ca-central-1": 0.02,
+        "eu-central-1": 0.02,
+        "eu-north-1": 0.02,
+        "eu-west-1": 0.02,
+        "us-east-1": 0.02,
+        "us-west-2": 0.02
+      }
+    },
+    "us-east-1": {
+      "fargate_vcpu_hour": 0.04048,
+      "fargate_gb_hour": 0.004445,
+      "transfer_out_per_gb": {
+        "ap-south-1": 0.02,
+        "ca-central-1": 0.02,
+        "eu-central-1": 0.02,
+        "eu-north-1": 0.02,
+        "eu-west-1": 0.02,
+        "eu-west-3": 0.02,
+        "us-west-2": 0.02
+      }
+    },
+    "us-west-2": {
+      "fargate_vcpu_hour": 0.04048,
+      "fargate_gb_hour": 0.004445,
+      "transfer_out_per_gb": {
+        "ap-south-1": 0.02,
+        "ca-central-1": 0.02,
+        "eu-central-1": 0.02,
+        "eu-north-1": 0.02,
+        "eu-west-1": 0.02,
+        "eu-west-3": 0.02,
+        "us-east-1": 0.02
+      }
+    }
+  }
+}
