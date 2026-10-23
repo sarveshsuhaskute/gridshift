@@ -19,12 +19,18 @@ _sfn = boto3.client("stepfunctions")
 
 
 def _claim_token(job_id: str, task_arn: str) -> str | None:
+    # A very fast task can stop before the dispatcher records its ARN. In that case accept the
+    # event if it comes from the region the current attempt was sent to.
+    region = task_arn.split(":")[3]
     try:
         old = jobs_table().update_item(
             Key={"job_id": job_id},
-            UpdateExpression="REMOVE task_token",
-            ConditionExpression="task_arn = :a AND attribute_exists(task_token)",
-            ExpressionAttributeValues={":a": task_arn},
+            UpdateExpression="SET task_arn = :a REMOVE task_token",
+            ConditionExpression=(
+                "attribute_exists(task_token) AND "
+                "(task_arn = :a OR (attribute_not_exists(task_arn) AND run_region = :r))"
+            ),
+            ExpressionAttributeValues={":a": task_arn, ":r": region},
             ReturnValues="ALL_OLD",
         )
     except ClientError as exc:

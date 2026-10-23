@@ -121,6 +121,25 @@ def test_completion_resumes_workflow_exactly_once(aws):
     assert output == {"exit_code": 0, "runtime_seconds": 1800.0, "region": "eu-north-1", "task_arn": TASK_ARN}
 
 
+def test_completion_before_dispatcher_records_the_task_arn(aws):
+    aws.Table("jobs").put_item(Item={"job_id": "job-1", "run_region": "eu-north-1", "task_token": "token-1"})
+    from handlers import complete_job
+
+    with mock.patch.object(complete_job, "_sfn") as sfn:
+        complete_job.handler(stopped_event(), None)
+    sfn.send_task_success.assert_called_once()
+    assert aws.Table("jobs").get_item(Key={"job_id": "job-1"})["Item"]["task_arn"] == TASK_ARN
+
+
+def test_early_completion_from_another_region_is_ignored(aws):
+    aws.Table("jobs").put_item(Item={"job_id": "job-1", "run_region": "us-east-1", "task_token": "token-1"})
+    from handlers import complete_job
+
+    with mock.patch.object(complete_job, "_sfn") as sfn:
+        complete_job.handler(stopped_event(), None)  # task ARN is in eu-north-1
+    sfn.send_task_success.assert_not_called()
+
+
 def test_completion_ignores_events_from_a_previous_attempt(aws):
     aws.Table("jobs").put_item(Item={"job_id": "job-1", "task_arn": "arn:new-task", "task_token": "token-2"})
     from handlers import complete_job

@@ -6,6 +6,7 @@ import json
 from functools import cache
 
 import boto3
+from botocore.exceptions import ClientError
 
 from gridshift.models import JobSpec, format_time
 from handlers.common import STARTED_BY_PREFIX, jobs_table, load_job, logger, utcnow
@@ -73,11 +74,17 @@ def handler(event, _context):
         raise DispatchError(f"RunTask failed in {region}: {response.get('failures')}")
 
     task_arn = response["tasks"][0]["taskArn"]
-    jobs_table().update_item(
-        Key={"job_id": job_id},
-        UpdateExpression="SET #s = :s, task_arn = :a, dispatched_at = :d",
-        ExpressionAttributeNames={"#s": "status"},
-        ExpressionAttributeValues={":s": "RUNNING", ":a": task_arn, ":d": format_time(utcnow())},
-    )
+    try:
+        # Skip if the task already finished and complete_job claimed the token.
+        jobs_table().update_item(
+            Key={"job_id": job_id},
+            UpdateExpression="SET #s = :s, task_arn = :a, dispatched_at = :d",
+            ConditionExpression="attribute_exists(task_token)",
+            ExpressionAttributeNames={"#s": "status"},
+            ExpressionAttributeValues={":s": "RUNNING", ":a": task_arn, ":d": format_time(utcnow())},
+        )
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            raise
     logger.info("job %s dispatched to %s on %s: %s", job_id, region, capacity, task_arn)
     return {"task_arn": task_arn}

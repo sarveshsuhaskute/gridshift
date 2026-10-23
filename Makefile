@@ -1,7 +1,7 @@
 PY := .venv/bin/python
 CDK := npx -y aws-cdk@2
 
-.PHONY: install test lint synth bootstrap deploy destroy plan
+.PHONY: install test lint synth bootstrap deploy destroy plan prices
 
 install:
 	python3 -m venv .venv
@@ -31,3 +31,6 @@ destroy:
 
 plan:
 	$(PY) scripts/plan_locally.py
+
+prices:
+	$(PY) scripts/refresh_prices.py
