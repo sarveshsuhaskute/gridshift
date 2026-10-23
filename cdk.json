@@ -1,0 +1,17 @@
+{
+  "app": ".venv/bin/python app.py",
+  "watch": {
+    "include": ["app.py", "infra/**", "src/**"]
+  },
+  "context": {
+    "home_region": "us-east-1",
+    "worker_regions": ["us-east-1", "ca-central-1", "eu-north-1"],
+    "carbon_provider": "static",
+    "alert_email": "",
+    "monthly_budget_usd": 10,
+    "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/aws-iam:minimizePolicies": true,
+    "@aws-cdk/core:enablePartitionLiterals": true
+  }
+}

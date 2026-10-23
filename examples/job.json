@@ -1,0 +1,10 @@
+{
+  "name": "monthly-report",
+  "command": ["python", "-c", "import time, os; time.sleep(60); print('done', os.environ['GRIDSHIFT_REGION'])"],
+  "vcpu": 0.5,
+  "memory_gb": 1,
+  "est_runtime_minutes": 5,
+  "deadline": "2026-12-31T00:00:00Z",
+  "input_data_gb": 2,
+  "max_cost_overhead_pct": 20
+}
