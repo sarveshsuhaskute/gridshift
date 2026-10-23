@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
 
@@ -14,9 +16,13 @@ _sfn = boto3.client("stepfunctions")
 
 
 def handler(event, _context):
+    body = event.get("body") or "{}"
     try:
-        body = json.loads(event.get("body") or "{}")
-    except json.JSONDecodeError:
+        # API Gateway base64-encodes bodies it doesn't recognise as text (e.g. no content-type).
+        if event.get("isBase64Encoded"):
+            body = base64.b64decode(body).decode()
+        body = json.loads(body)
+    except (json.JSONDecodeError, binascii.Error, UnicodeDecodeError):
         return http_response(400, {"error": "body must be valid JSON"})
 
     now = utcnow()

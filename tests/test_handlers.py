@@ -80,6 +80,18 @@ def test_submit_then_plan_stores_a_decision(aws):
     assert "less CO2e" in item["decision"]["explanation"]
 
 
+def test_submit_accepts_base64_encoded_bodies(aws):
+    import base64
+
+    from handlers import submit_job
+
+    event = {"body": base64.b64encode(json.dumps(VALID).encode()).decode(), "isBase64Encoded": True}
+    with mock.patch.object(submit_job, "_sfn") as sfn:
+        sfn.start_execution.return_value = {"executionArn": "arn:exec"}
+        assert submit_job.handler(event, None)["statusCode"] == 202
+    assert submit_job.handler({"body": "%%%", "isBase64Encoded": True}, None)["statusCode"] == 400
+
+
 @pytest.mark.parametrize(
     "body, error",
     [
