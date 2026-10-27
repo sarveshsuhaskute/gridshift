@@ -66,7 +66,7 @@ methodology:
 
 | Quantity | Value |
 |---|---|
-| vCPU power | 0.74 W (idle) to 3.5 W (max), interpolated at 50% utilisation |
+| vCPU power | 0.74 W (idle) to 3.5 W (max), interpolated at the job's `cpu_utilization` (default 50%) |
 | Memory | 0.000392 kWh per GB-hour |
 | Network transfer | 0.001 kWh per GB |
 | PUE (AWS) | 1.135 |
@@ -112,5 +112,5 @@ static annual average, and the decision records how much forecast data it had.
 
 1. Cognito-authenticated web dashboard (carbon vs. cost vs. latency per job).
 2. Custom job images built once and replicated to every worker region (ECR replication).
-3. Measured CPU utilisation (Container Insights) instead of a fixed 50% in the energy model.
+3. Measured CPU utilisation (Container Insights) instead of the declared `cpu_utilization`.
 4. Multi-account mode: workers in separate accounts behind AWS Organizations.

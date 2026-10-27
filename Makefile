@@ -1,7 +1,7 @@
 PY := .venv/bin/python
 CDK := npx -y aws-cdk@2
 
-.PHONY: install test lint synth bootstrap deploy destroy plan prices
+.PHONY: install test lint synth bootstrap deploy destroy plan prices benchmark-submit benchmark-report
 
 install:
 	python3 -m venv .venv
@@ -34,3 +34,9 @@ plan:
 
 prices:
 	$(PY) scripts/refresh_prices.py
+
+benchmark-submit:
+	$(PY) scripts/benchmark.py submit --count 20
+
+benchmark-report:
+	$(PY) scripts/benchmark.py report

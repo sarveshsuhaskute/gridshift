@@ -67,8 +67,9 @@ src/handlers/              Lambda handlers (submit, plan, dispatch, complete, fi
 scripts/plan_locally.py    Run the planner locally, no AWS account needed
 scripts/gridshift_cli.py   SigV4-signed client for the deployed API
 scripts/refresh_prices.py  Regenerate prices.json from the public AWS Price List
+scripts/benchmark.py       Submit a benchmark workload and write docs/RESULTS.md
 .github/workflows/         CI (lint, tests, synth) and keyless OIDC deploy
-tests/                     pytest suite: engine, handlers (moto), CDK assertions
+tests/                     pytest: engine, handlers (moto), CDK assertions, end-to-end lifecycle
 ```
 
 ## Quick start
@@ -135,7 +136,17 @@ If the account already has a GitHub OIDC provider, set `github_oidc_provider_arn
 .venv/bin/python scripts/gridshift_cli.py status <job_id>
 ```
 
-### 4. Tear down
+### 4. Measure real results
+
+```bash
+make benchmark-submit   # 20 mixed jobs: CPU-bound, idle, data-heavy, EU-resident, zero-budget, urgent
+make benchmark-report   # writes docs/RESULTS.md from the measured outcomes
+```
+
+Some jobs wait hours for a clean slot, so run the report again later for final numbers. A
+20-job run costs a few cents.
+
+### 5. Tear down
 
 ```bash
 make destroy
@@ -154,6 +165,7 @@ make destroy
 | `input_data_gb` | no | Size of input data, used for data-gravity costs |
 | `allowed_regions` | no | Data-residency allow list |
 | `max_cost_overhead_pct` | no | Max extra cost vs. running now at home (default 25) |
+| `cpu_utilization` | no | Average CPU load, 0.05–1 (default 0.5). Drives the energy estimate. |
 
 ## Cost
 
@@ -166,5 +178,5 @@ to get an AWS Budget alarm at 80% of `monthly_budget_usd`.
 - Fargate Spot prices aren't published in the Price List because they change over time.
   They are modelled as a 70% discount on real on-demand prices.
 - Static grid intensities are rough annual averages, used only when live forecasts are missing.
-- The energy model uses a fixed 50% CPU utilisation. Measuring real utilisation is a roadmap item.
+- CPU utilisation is declared per job (default 50%), not measured.
 - Jobs use a public base image. Custom images need to exist in every worker region.
