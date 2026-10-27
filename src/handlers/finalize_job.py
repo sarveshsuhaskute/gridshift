@@ -19,11 +19,11 @@ def _measured(spec: JobSpec, decision: dict, run: dict) -> dict:
     region = run.get("region") or decision["region"]
     # A fallback run happens outside the planned slot, so use that region's static average.
     intensity = decision["intensity"] if region == decision["region"] else get_profile(region).static_intensity
-    kwh = energy.compute_kwh(spec.vcpu, spec.memory_gb, hours)
+    kwh = spec.compute_kwh(hours)
     if region != spec.data_region:
         kwh += energy.transfer_kwh(spec.input_data_gb)
     emitted = energy.grams_co2(kwh, intensity)
-    baseline = energy.grams_co2(energy.compute_kwh(spec.vcpu, spec.memory_gb, hours), decision["baseline_intensity"])
+    baseline = energy.grams_co2(spec.compute_kwh(hours), decision["baseline_intensity"])
     return {
         "region": region,
         "runtime_seconds": round(hours * 3600, 1),

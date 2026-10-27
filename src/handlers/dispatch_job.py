@@ -35,8 +35,9 @@ def handler(event, _context):
     # Store the token before starting the task so the completion event can always find it.
     jobs_table().update_item(
         Key={"job_id": job_id},
-        UpdateExpression="SET #s = :s, task_token = :t, run_region = :r, capacity = :c REMOVE task_arn",
-        ExpressionAttributeNames={"#s": "status"},
+        # "status" and "capacity" are DynamoDB reserved words, so both go through placeholders.
+        UpdateExpression="SET #s = :s, task_token = :t, run_region = :r, #c = :c REMOVE task_arn",
+        ExpressionAttributeNames={"#s": "status", "#c": "capacity"},
         ExpressionAttributeValues={":s": "DISPATCHING", ":t": event["task_token"], ":r": region, ":c": capacity},
     )
 

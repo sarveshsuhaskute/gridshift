@@ -7,6 +7,8 @@ import uuid
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 
+from gridshift import energy
+
 # Valid Fargate task sizes: vCPU -> allowed memory values in GB.
 FARGATE_SIZES: dict[float, tuple[float, ...]] = {
     0.25: (0.5, 1, 2),
@@ -49,10 +51,16 @@ class JobSpec:
     input_data_gb: float = 0.0
     allowed_regions: tuple[str, ...] | None = None
     max_cost_overhead_pct: float = 25.0
+    # Average CPU load while the job runs (0-1). Drives the energy estimate: a mostly idle
+    # I/O-bound job draws far less power than a CPU-bound render.
+    cpu_utilization: float = energy.DEFAULT_UTILIZATION
 
     @property
     def est_runtime_hours(self) -> float:
         return self.est_runtime_minutes / 60.0
+
+    def compute_kwh(self, hours: float) -> float:
+        return energy.compute_kwh(self.vcpu, self.memory_gb, hours, self.cpu_utilization)
 
     @classmethod
     def from_request(cls, data: dict, home_region: str, now: datetime) -> JobSpec:
@@ -74,6 +82,7 @@ class JobSpec:
             runtime = int(data["est_runtime_minutes"])
             input_gb = float(data.get("input_data_gb", 0.0))
             overhead = float(data.get("max_cost_overhead_pct", 25.0))
+            utilization = float(data.get("cpu_utilization", energy.DEFAULT_UTILIZATION))
         except KeyError as exc:
             raise ValidationError(f"{exc.args[0]} is required") from None
         except (TypeError, ValueError):
@@ -89,6 +98,8 @@ class JobSpec:
             raise ValidationError("input_data_gb cannot be negative")
         if not 0 <= overhead <= 500:
             raise ValidationError("max_cost_overhead_pct must be between 0 and 500")
+        if not 0.05 <= utilization <= 1.0:
+            raise ValidationError("cpu_utilization must be between 0.05 and 1.0")
 
         if "deadline" not in data:
             raise ValidationError("deadline is required")
@@ -117,6 +128,7 @@ class JobSpec:
             input_data_gb=input_gb,
             allowed_regions=allowed,
             max_cost_overhead_pct=overhead,
+            cpu_utilization=utilization,
         )
 
     def to_json(self) -> str:

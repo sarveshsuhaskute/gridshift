@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 
 import pytest
@@ -40,11 +41,26 @@ def test_valid_request_round_trips_through_json():
         ({"max_cost_overhead_pct": -1}, "max_cost_overhead_pct"),
         ({"allowed_regions": []}, "allowed_regions"),
         ({"vcpu": "lots"}, "numeric"),
+        ({"cpu_utilization": 0}, "cpu_utilization"),
+        ({"cpu_utilization": 1.5}, "cpu_utilization"),
     ],
 )
 def test_invalid_requests_are_rejected(overrides, message):
     with pytest.raises(ValidationError, match=message):
         JobSpec.from_request(request(**overrides), "us-east-1", NOW)
+
+
+def test_cpu_utilization_drives_the_energy_estimate():
+    idle = JobSpec.from_request(request(cpu_utilization=0.1), "us-east-1", NOW)
+    busy = JobSpec.from_request(request(cpu_utilization=1.0), "us-east-1", NOW)
+    assert busy.compute_kwh(1) > 2 * idle.compute_kwh(1)
+
+
+def test_specs_stored_before_cpu_utilization_existed_still_load():
+    spec = JobSpec.from_request(request(), "us-east-1", NOW)
+    data = json.loads(spec.to_json())
+    del data["cpu_utilization"]
+    assert JobSpec.from_json(json.dumps(data)).cpu_utilization == 0.5
 
 
 def test_missing_runtime_is_reported():

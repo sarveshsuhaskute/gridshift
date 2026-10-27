@@ -118,7 +118,7 @@ def _score(
     end = start + timedelta(hours=hours)
     intensity, coverage = average_intensity(series, start, end, region.static_intensity)
 
-    compute_kwh = energy.compute_kwh(job.vcpu, job.memory_gb, hours)
+    compute_kwh = job.compute_kwh(hours)
     carbon = energy.grams_co2(compute_kwh, intensity)
     cost = hours * (job.vcpu * region.spot_vcpu_hour + job.memory_gb * region.spot_gb_hour)
 
