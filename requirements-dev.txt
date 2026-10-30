@@ -1,5 +1,5 @@
 -r requirements.txt
 boto3
-moto[dynamodb,stepfunctions]>=5
+moto[dynamodb,stepfunctions]>=5.2.4
 pytest
 ruff
